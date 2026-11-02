@@ -75,20 +75,26 @@ drawingsRouter.get('/image/:drawingId', async (c) => {
   const db = c.env.DB
 
   const drawing = await db.prepare(`
-    SELECT d.*, r.session_id, r.status as round_status FROM drawings d JOIN rounds r ON d.round_id = r.id WHERE d.id = ?
+    SELECT d.*, r.session_id, r.status as round_status, s.status as session_status
+    FROM drawings d
+    JOIN rounds r ON d.round_id = r.id
+    JOIN sessions s ON r.session_id = s.id
+    WHERE d.id = ?
   `).bind(drawingId).first<any>()
   if (!drawing || drawing.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
 
+  const isFinalOrEnded = drawing.round_status === 'results' || drawing.round_status === 'ended' || drawing.session_status === 'ended'
+
   // Player can only see opponent drawing during results/ended
   if (auth.role === 'player' && drawing.participant_id !== auth.participantId) {
-    if (drawing.round_status !== 'results' && drawing.round_status !== 'ended') {
+    if (!isFinalOrEnded) {
       return c.json({ error: 'Forbidden' }, 403)
     }
   }
 
   // Spectator can only see drawings during results/ended
   if (auth.role === 'spectator') {
-    if (drawing.round_status !== 'results' && drawing.round_status !== 'ended') {
+    if (!isFinalOrEnded) {
       return c.json({ error: 'Forbidden' }, 403)
     }
   }

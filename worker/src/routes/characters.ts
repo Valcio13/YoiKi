@@ -133,19 +133,24 @@ charactersRouter.get('/:id/image', async (c) => {
 
   const characterId = c.req.param('id')
   const db = c.env.DB
-  const character = await db.prepare(
-    'SELECT session_id, held_by_slot, guessed_by_slot, image_key, revealed FROM characters WHERE id = ?'
-  ).bind(characterId).first<any>()
+  const character = await db.prepare(`
+    SELECT c.session_id, c.held_by_slot, c.guessed_by_slot, c.image_key, c.revealed, s.status as session_status
+    FROM characters c
+    JOIN sessions s ON c.session_id = s.id
+    WHERE c.id = ?
+  `).bind(characterId).first<any>()
 
   if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
 
-  // Spectator: only if revealed
-  if (auth.role === 'spectator' && character.revealed !== 1) {
+  const isFinalOrRevealed = character.revealed === 1 || character.session_status === 'ended'
+
+  // Spectator: only if revealed or game ended
+  if (auth.role === 'spectator' && !isFinalOrRevealed) {
     return c.json({ error: 'Forbidden' }, 403)
   }
 
-  // Player: only if they hold it or it is revealed
-  if (auth.role === 'player' && character.held_by_slot !== auth.participantSlot && character.revealed !== 1) {
+  // Player: only if they hold it or it is revealed or game ended
+  if (auth.role === 'player' && character.held_by_slot !== auth.participantSlot && !isFinalOrRevealed) {
     return c.json({ error: 'Forbidden' }, 403)
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch, getToken, getSessionId, getWsUrl } from '../lib/api'
+import GameStatsView from '../components/GameStatsView'
 
 interface Participant {
   id: string
@@ -153,78 +154,84 @@ export default function SpectatorView() {
         </div>
       </header>
 
-      {/* Main Stage: Player Canvases */}
-      <main className="flex-1 my-6 flex items-center justify-center">
-        <div className={`w-full max-w-7xl grid grid-cols-1 ${session?.mode === '2p' ? 'md:grid-cols-2' : 'max-w-3xl'} gap-8`}>
-          {sortedParticipants.map((p) => {
-            const preview = livePreviews[p.id]
-            const isOnline = playerOnline[p.id] !== false
-            const drawingSub = drawings.find(d => d.participant_id === p.id && d.submitted === 1)
-            // If in results and revealed, find the character this player was guessing
-            const guessedChar = revealedChars.find(c => c.guessed_by_slot === p.slot)
+      {/* Main Stage: Player Canvases OR Final Game Stats */}
+      {session?.status === 'ended' ? (
+        <main className="flex-1 my-6 overflow-y-auto px-4 max-w-6xl mx-auto w-full">
+          <GameStatsView sessionId={sessionId} isHost={false} />
+        </main>
+      ) : (
+        <main className="flex-1 my-6 flex items-center justify-center">
+          <div className={`w-full max-w-7xl grid grid-cols-1 ${session?.mode === '2p' ? 'md:grid-cols-2' : 'max-w-3xl'} gap-8`}>
+            {sortedParticipants.map((p) => {
+              const preview = livePreviews[p.id]
+              const isOnline = playerOnline[p.id] !== false
+              const drawingSub = drawings.find(d => d.participant_id === p.id && d.submitted === 1)
+              // If in results and revealed, find the character this player was guessing
+              const guessedChar = revealedChars.find(c => c.guessed_by_slot === p.slot)
 
-            return (
-              <div
-                key={p.id}
-                className="bg-zinc-950 border-2 border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
-              >
-                {/* Player Card Header */}
-                <div className="bg-zinc-900/90 px-6 py-4 flex items-center justify-between border-b border-zinc-800">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                    <span className="text-xl font-black text-white tracking-wide">
-                      {p.display_name}
-                    </span>
+              return (
+                <div
+                  key={p.id}
+                  className="bg-zinc-950 border-2 border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+                >
+                  {/* Player Card Header */}
+                  <div className="bg-zinc-900/90 px-6 py-4 flex items-center justify-between border-b border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                      <span className="text-xl font-black text-white tracking-wide">
+                        {p.display_name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-black/60 px-3.5 py-1 rounded-full border border-zinc-800">
+                      <span className="text-2xl font-black text-yellow-400 tracking-tight font-mono">
+                        {p.points}
+                      </span>
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                        PTS
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 bg-black/60 px-3.5 py-1 rounded-full border border-zinc-800">
-                    <span className="text-2xl font-black text-yellow-400 tracking-tight font-mono">
-                      {p.points}
-                    </span>
-                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                      PTS
-                    </span>
+                  {/* Canvas Display Viewport */}
+                  <div className="relative aspect-4/3 bg-black flex items-center justify-center overflow-hidden">
+                    {preview ? (
+                      <img
+                        src={preview}
+                        alt={`${p.display_name} drawing`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : drawingSub ? (
+                      <img
+                        src={`/api/drawings/image/${drawingSub.id}`}
+                        alt={`${p.display_name} final drawing`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="text-center text-zinc-700 p-8">
+                        <div className="text-5xl mb-2 opacity-40">🖌️</div>
+                        <p className="text-sm font-semibold text-zinc-500">Live Canvas Ready</p>
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {/* Canvas Display Viewport */}
-                <div className="relative aspect-4/3 bg-black flex items-center justify-center overflow-hidden">
-                  {preview ? (
-                    <img
-                      src={preview}
-                      alt={`${p.display_name} drawing`}
-                      className="w-full h-full object-contain"
-                    />
-                  ) : drawingSub ? (
-                    <img
-                      src={`/api/drawings/image/${drawingSub.id}`}
-                      alt={`${p.display_name} final drawing`}
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-center text-zinc-700 p-8">
-                      <div className="text-5xl mb-2 opacity-40">🖌️</div>
-                      <p className="text-sm font-semibold text-zinc-500">Live Canvas Ready</p>
+                  {/* Results Reveal Banner (Only visible when revealed in Results phase) */}
+                  {isResults && guessedChar && (
+                    <div className="bg-indigo-950/90 border-t border-indigo-800/80 p-4 text-center">
+                      <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest mb-1">
+                        Target Answer Revealed
+                      </p>
+                      <p className="text-2xl font-black text-yellow-300 tracking-wide">
+                        {guessedChar.name}
+                      </p>
                     </div>
                   )}
                 </div>
-
-                {/* Results Reveal Banner (Only visible when revealed in Results phase) */}
-                {isResults && guessedChar && (
-                  <div className="bg-indigo-950/90 border-t border-indigo-800/80 p-4 text-center">
-                    <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest mb-1">
-                      Target Answer Revealed
-                    </p>
-                    <p className="text-2xl font-black text-yellow-300 tracking-wide">
-                      {guessedChar.name}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </main>
+              )
+            })}
+          </div>
+        </main>
+      )}
 
       {/* Broadcast Footer */}
       <footer className="text-center text-zinc-600 text-xs font-medium tracking-widest uppercase pt-3 border-t border-zinc-900">

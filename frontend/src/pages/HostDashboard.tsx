@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl } from '../lib/api'
+import GameStatsView from '../components/GameStatsView'
 
 interface Session {
   id: string
@@ -96,6 +97,7 @@ export default function HostDashboard() {
   const [hintImageFile, setHintImageFile] = useState<File | null>(null)
 
   const [showLinksModal, setShowLinksModal] = useState(false)
+  const [viewStats, setViewStats] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -353,6 +355,15 @@ export default function HostDashboard() {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setViewStats(prev => !prev)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border flex items-center gap-1.5 ${
+              viewStats ? 'bg-indigo-600 text-white border-indigo-500 shadow-md' : 'bg-gray-800 hover:bg-gray-700 text-indigo-300 border-gray-700'
+            }`}
+          >
+            <span>📊</span> {viewStats ? 'Live Dashboard' : 'Game Stats'}
+          </button>
+
+          <button
             onClick={() => setShowLinksModal(true)}
             className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg transition border border-gray-700 flex items-center gap-1.5"
           >
@@ -373,6 +384,7 @@ export default function HostDashboard() {
           <div className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${
             isPlaying ? 'bg-green-900/80 text-green-300 border border-green-700' :
             isResults ? 'bg-yellow-900/80 text-yellow-300 border border-yellow-700' :
+            session?.status === 'ended' ? 'bg-purple-900/80 text-purple-300 border border-purple-700' :
             'bg-gray-800 text-gray-400 border border-gray-700'
           }`}>
             {session?.status} · Round {session?.current_round}
@@ -433,16 +445,56 @@ export default function HostDashboard() {
               </>
             )}
 
-            <button
-              onClick={() => {
-                if (confirm('End the entire game session?')) updateStatus('ended')
-              }}
-              className="px-4 py-2 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 font-medium text-sm rounded-xl transition"
-            >
-              End Game
-            </button>
+            {session?.status === 'ended' ? (
+              <>
+                <button
+                  onClick={() => setViewStats(true)}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl transition shadow-lg flex items-center gap-2"
+                >
+                  <span>📊</span> View Game Stats
+                </button>
+                <button
+                  onClick={async () => {
+                    if (confirm('Restart game session for a new match? Points will reset to 100.')) {
+                      await apiFetch(`/sessions/${sessionId}/restart`, { method: 'POST' }, token)
+                      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'session_restarted' }))
+                      setViewStats(false)
+                      await fetchData()
+                    }
+                  }}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl transition flex items-center gap-2"
+                >
+                  <span>🔄</span> Play Again (Reset Points)
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={async () => {
+                  if (confirm('End the entire game session and display game statistics?')) {
+                    await updateStatus('ended')
+                    setViewStats(true)
+                  }
+                }}
+                className="px-4 py-2 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 font-medium text-sm rounded-xl transition flex items-center gap-1.5"
+              >
+                <span>🏁</span> End Game
+              </button>
+            )}
           </div>
         </div>
+
+        {/* GAME STATS DISPLAY */}
+        {(viewStats || session?.status === 'ended') && (
+          <GameStatsView
+            sessionId={sessionId}
+            isHost={true}
+            onClose={() => setViewStats(false)}
+            onRestart={() => {
+              setViewStats(false)
+              fetchData()
+            }}
+          />
+        )}
 
         {/* 2. LIVE SPECTATOR: DUAL CANVAS DISPLAY */}
         <div>

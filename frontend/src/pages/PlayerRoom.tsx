@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl } from '../lib/api'
+import GameStatsView from '../components/GameStatsView'
 
 interface Participant {
   id: string
@@ -266,7 +267,8 @@ export default function PlayerRoom() {
   }
 
   const isPlaying = session?.status === 'playing'
-  const isResults = session?.status === 'results' || session?.status === 'ended'
+  const isResults = session?.status === 'results'
+  const isEnded = session?.status === 'ended'
   const draftKey = `gd_draft_${sessionId}_${participant?.id}_round_${session?.current_round}`
 
   return (
@@ -294,15 +296,22 @@ export default function PlayerRoom() {
           <div className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
             isPlaying ? 'bg-green-900/80 text-green-300 border border-green-700' :
             isResults ? 'bg-yellow-900/80 text-yellow-300 border border-yellow-700' :
+            isEnded ? 'bg-purple-900/80 text-purple-300 border border-purple-700' :
             'bg-gray-800 text-gray-400'
           }`}>
             {isPlaying ? `Round ${session?.current_round} Live` :
-             isResults ? 'Results' : 'Lobby'}
+             isResults ? 'Round Results' :
+             isEnded ? 'Game Over' : 'Lobby'}
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
+      {isEnded ? (
+        <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
+          <GameStatsView sessionId={sessionId} isHost={false} />
+        </main>
+      ) : (
       <main className="flex-1 p-4 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
 
         {/* LEFT COLUMN: Secret Cards & Hint Shop (5 cols) */}
@@ -525,6 +534,7 @@ export default function PlayerRoom() {
         </div>
 
       </main>
+      )}
     </div>
   )
 }
