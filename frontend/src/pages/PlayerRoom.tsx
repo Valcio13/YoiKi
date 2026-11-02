@@ -166,7 +166,7 @@ export default function PlayerRoom() {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         iframeRef.current.contentWindow.postMessage({ type: 'klecks:request-snapshot' }, '*')
       }
-    }, 1500)
+    }, 2500)
 
     return () => clearInterval(timer)
   }, [session, submittedDrawing])

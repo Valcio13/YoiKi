@@ -148,7 +148,14 @@ export class GameRoom extends DurableObject<Env> {
     } catch {
       // Ignore
     }
-    ws.close(code, reason)
+    // Socket is already closing or closed; safely close only if still open
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, 'Closed')
+      }
+    } catch {
+      // Ignore
+    }
   }
 
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {

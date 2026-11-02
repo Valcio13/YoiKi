@@ -60,17 +60,17 @@
       try {
         const c = getCompositeCanvas();
         if (c) {
-          // Ultra-low bandwidth preview: downscaled to 400x300 JPEG (approx 10-15KB)
+          // Optimized preview: 640x480 JPEG at 0.5 quality (~20-25KB, crisp in 1080p dashboard)
           if (!window._previewCanvas) {
             window._previewCanvas = document.createElement('canvas');
-            window._previewCanvas.width = 400;
-            window._previewCanvas.height = 300;
+            window._previewCanvas.width = 640;
+            window._previewCanvas.height = 480;
           }
           const pCtx = window._previewCanvas.getContext('2d');
           pCtx.fillStyle = '#ffffff';
-          pCtx.fillRect(0, 0, 400, 300);
-          pCtx.drawImage(c, 0, 0, 400, 300);
-          return window._previewCanvas.toDataURL('image/jpeg', 0.4);
+          pCtx.fillRect(0, 0, 640, 480);
+          pCtx.drawImage(c, 0, 0, 640, 480);
+          return window._previewCanvas.toDataURL('image/jpeg', 0.5);
         }
       } catch (e) {
         // Fallback

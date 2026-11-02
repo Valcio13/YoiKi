@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev --port 8787",
-    "db:migrate": "wrangler d1 execute guess-draw-db --local --file=../migrations/0001_init.sql",
+    "db:migrate": "wrangler d1 migrations apply guess-draw-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply guess-draw-db --remote",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types"
   },
