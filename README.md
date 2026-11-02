@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>English</strong> | <a href="README.id.md">Bahasa Indonesia</a>
+</p>
+
 # 🎨 YoiKi (与意気) — Private Real-Time Multiplayer Character Guessing Game
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-indigo.svg)](https://opensource.org/licenses/MIT)
@@ -18,6 +22,51 @@
 | Player Room & Klecks Canvas | Final Results & Podium |
 | :---: | :---: |
 | ![Player Room](screenshot_player_a.png) | ![Final Results](screenshot_final_results.png) |
+
+---
+
+## ✨ Features
+
+### 🖌️ Klecks Digital Drawing Studio
+- **Full Drawing Tool Suite**: Integrated [Bitbof Klecks](https://github.com/bitbof/klecks) engine featuring responsive brush strokes, pencil, and eraser.
+- **Layers & Blending**: Support for multi-layer artwork with opacity controls and layer reordering.
+- **Precision Color Picker & Sizing**: Fine-grained brush diameter, opacity sliders, and full palette selection.
+- **Canvas Operations**: Unlimited undo/redo history, canvas clearing with confirmation, and smooth zoom/pan viewport navigation.
+- **Direct Cloud Submission**: Single-click drawing submission exported as high-resolution PNG directly to Cloudflare R2 storage.
+
+### ⚡ Real-Time Live Spectator & WebSockets
+- **Dual Simultaneous Streaming**: Watch both players draw live on a side-by-side split screen with sub-second latency.
+- **Bandwidth-Optimized Canvas Diffs**: Client transmits 640×480 JPEG previews (~0.5 quality) throttled at ~2.5s **only when canvas pixels change**.
+- **Zero Temporary Storage Writes**: Live previews are transiently relayed through memory via WebSockets, never written to R2.
+- **Resilient Reconnection**: Automatic reconnection and state resynchronization when players refresh or experience network jitter.
+
+### 📺 OBS & Livestream Broadcast Mode
+- **1080p Optimized Display**: Dedicated full-screen OBS layout (`/spectator/:sessionId?token=...`) formatted specifically for 1920×1080 window or browser source capture.
+- **Spoiler-Free Presentation**: Clean broadcast view shows player canvases, nicknames, live points, and round timers while keeping secret character identities hidden.
+- **High-Contrast Dark Theme**: Streamer-ready UI with clear typography, status tags, and high visual clarity.
+
+### 🔒 Cryptographic Secrecy & Fair Play
+- **Server-Side Target Isolation**: Guessing targets are cryptographically masked at the API and WebSocket layer (`??? (Secret)`); secret names are never exposed in DOM or network payloads before the host triggers the reveal.
+- **Cross-Player Secrecy**: In 2-player mode, Player A holds Bob's secret target and answers Bob's questions, while Player B holds Alice's secret target and answers Alice's questions.
+- **Role-Based Token Authentication**: Secure nanoid tokens isolate Host, Participant, and Spectator permissions.
+
+### 💡 Strategic Hint Economy
+- **Custom Hint Shop**: Hosts can configure multiple text clues and reference images per character with custom point pricing.
+- **Server-Side Redaction**: Clues remain locked and masked on the server until explicitly purchased by the assigned player.
+- **Automated Point Deductions**: Instant balance updates via transactional ledger upon purchase.
+- **Cross-Purchase Prevention**: Strict validation ensures players can never purchase or peek at opponents' hints.
+
+### 👑 Comprehensive Host Command Center
+- **Live Canvas Monitor**: Real-time side-by-side player preview cards with participant connection health indicators.
+- **Fullscreen Zoom Modal**: Inspect artwork in high resolution with smooth zoom controls (+/-) and fast keyboard navigation (`Tab` or `Arrow keys` to switch between players).
+- **Quick-Scoring Actions**: One-click score buttons (`+10`, `+25`, `+50 🏆 Winner`, `-10`) plus custom point delta adjustments with reasons.
+- **Game Lifecycle Control**: Start rounds, create characters, assign hint packages, reveal character identities, and transition sessions.
+
+### 🏆 Match Recap, Gallery & Audit Ledger
+- **Podium & Standings**: Automatic winner celebration with 1st and 2nd place podium rankings.
+- **Hint Spending Summary**: Detailed breakdown of points spent on clues versus points earned through drawings and guesses.
+- **Artwork Gallery**: Permanent gallery displaying final submitted high-resolution artwork from all rounds.
+- **Point Audit Ledger**: Complete tamper-evident transaction history recording every reward, penalty, and hint transaction.
 
 ---
 
