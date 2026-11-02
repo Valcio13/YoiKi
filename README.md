@@ -1,6 +1,6 @@
-# 🎨 Guess & Draw — Multiplayer Character Guessing Game
+# 🎨 Yoiki — Multiplayer Character Guessing Game
 
-Guess & Draw is a private, real-time multiplayer character guessing game designed for live gaming sessions and OBS broadcast recording.
+Yoiki is a private, real-time multiplayer character guessing game designed for live gaming sessions and OBS broadcast recording.
 
 ---
 

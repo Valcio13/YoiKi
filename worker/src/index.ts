@@ -137,7 +137,7 @@ app.route('/api/drawings', drawingsRouter)
 
 // Serve frontend static files (in production, use Cloudflare Pages instead)
 app.get('*', (c) => {
-  return c.text('Guess & Draw Worker API', 200)
+  return c.text('Yoiki Worker API', 200)
 })
 
 export default app

@@ -1,5 +1,5 @@
 {
-  "name": "guess-draw-worker",
+  "name": "yoiki-worker",
   "version": "1.0.0",
   "private": true,
   "scripts": {

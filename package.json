@@ -1,5 +1,5 @@
 {
-  "name": "guess-and-draw",
+  "name": "yoiki",
   "private": true,
   "workspaces": [
     "frontend",

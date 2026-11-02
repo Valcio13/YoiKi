@@ -56,7 +56,7 @@ export default function HomePage({ onNavigate }: Props) {
   if (createdSession) {
     return (
       <div className="max-w-2xl mx-auto p-8">
-        <h1 className="text-3xl font-bold mb-2 text-indigo-400">🎨 Guess & Draw</h1>
+        <h1 className="text-3xl font-bold mb-2 text-indigo-400">🎨 Yoiki</h1>
         <p className="text-gray-400 mb-8">Session created! Share the links below.</p>
 
         <div className="bg-gray-900 rounded-xl p-6 mb-4">
@@ -116,7 +116,7 @@ export default function HomePage({ onNavigate }: Props) {
 
   return (
     <div className="max-w-md mx-auto p-8 pt-20">
-      <h1 className="text-4xl font-bold mb-2 text-indigo-400">🎨 Guess & Draw</h1>
+      <h1 className="text-4xl font-bold mb-2 text-indigo-400">🎨 Yoiki</h1>
       <p className="text-gray-400 mb-10">Private multiplayer character guessing game</p>
 
       <div className="bg-gray-900 rounded-xl p-6 space-y-5">
