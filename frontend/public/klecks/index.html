@@ -58,23 +58,24 @@
 
     window.getCanvasSnapshot = async function () {
       try {
-        const blob = await klecks.getPNG();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
         const c = getCompositeCanvas();
         if (c) {
-          try {
-            return c.toDataURL('image/jpeg', 0.5);
-          } catch (e) {
-            return null;
+          // Ultra-low bandwidth preview: downscaled to 400x300 JPEG (approx 10-15KB)
+          if (!window._previewCanvas) {
+            window._previewCanvas = document.createElement('canvas');
+            window._previewCanvas.width = 400;
+            window._previewCanvas.height = 300;
           }
+          const pCtx = window._previewCanvas.getContext('2d');
+          pCtx.fillStyle = '#ffffff';
+          pCtx.fillRect(0, 0, 400, 300);
+          pCtx.drawImage(c, 0, 0, 400, 300);
+          return window._previewCanvas.toDataURL('image/jpeg', 0.4);
         }
-        return null;
+      } catch (e) {
+        // Fallback
       }
+      return null;
     };
 
     // Check for draft in localStorage

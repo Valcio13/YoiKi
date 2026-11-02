@@ -1,4 +1,5 @@
-const BASE = '/api'
+const API_URL = import.meta.env.VITE_API_URL || ''
+const BASE = `${API_URL}/api`
 
 export async function apiFetch<T>(
   path: string,
@@ -40,6 +41,10 @@ export async function apiUpload<T>(
 }
 
 export function getWsUrl(sessionId: string, token: string): string {
+  if (API_URL) {
+    const wsBase = API_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+    return `${wsBase}/api/ws/${sessionId}?token=${encodeURIComponent(token)}`
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   return `${protocol}//${host}/api/ws/${sessionId}?token=${encodeURIComponent(token)}`
