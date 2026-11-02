@@ -1,0 +1,10 @@
+{
+  "name": "guess-and-draw",
+  "private": true,
+  "workspaces": ["frontend", "worker"],
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:worker": "cd worker && npm run dev",
+    "build": "cd frontend && npm run build"
+  }
+}
