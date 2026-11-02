@@ -15,15 +15,31 @@ export interface Env {
   DB: D1Database
   STORAGE: R2Bucket
   GAME_ROOM: DurableObjectNamespace
+  ENVIRONMENT?: string
+  ALLOWED_ORIGINS?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
 
-app.use('*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-}))
+app.use('*', async (c, next) => {
+  const allowed = c.env.ALLOWED_ORIGINS
+  const isDev = !c.env.ENVIRONMENT || c.env.ENVIRONMENT === 'development'
+
+  const corsMiddleware = cors({
+    origin: (origin) => {
+      // In development or if not configured, allow all origins
+      if (isDev || !allowed || allowed === '*' || !origin) {
+        return origin || '*'
+      }
+      const allowedList = allowed.split(',').map((s) => s.trim())
+      return allowedList.includes(origin) ? origin : null
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  })
+
+  return corsMiddleware(c, next)
+})
 
 // Health check
 app.get('/api/health', (c) => c.json({ ok: true, ts: Date.now() }))

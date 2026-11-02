@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev --port 8787",
-    "db:migrate": "wrangler d1 migrations apply guess-draw-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply guess-draw-db --remote",
+    "db:migrate": "wrangler d1 migrations apply yoiki-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply yoiki-db --remote",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types"
   },

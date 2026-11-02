@@ -1,4 +1,4 @@
-name = "guess-draw-worker"
+name = "yoiki-worker"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
@@ -6,8 +6,9 @@ workers_dev = true
 
 [[ d1_databases ]]
 binding = "DB"
-database_name = "guess-draw-db"
+database_name = "yoiki-db"
 database_id = "local-db"
+migrations_dir = "migrations"
 
 [[durable_objects.bindings]]
 name = "GAME_ROOM"
@@ -19,7 +20,9 @@ new_sqlite_classes = ["GameRoom"]
 
 [[ r2_buckets ]]
 binding = "STORAGE"
-bucket_name = "guess-draw-storage"
+bucket_name = "yoiki-storage"
 
 [vars]
 ENVIRONMENT = "development"
+# In production, set ALLOWED_ORIGINS to your Cloudflare Pages URL:
+# ALLOWED_ORIGINS = "https://yoiki.pages.dev"

@@ -16,6 +16,8 @@ drawingsRouter.post('/submit', async (c) => {
   if (!file || !roundId) return c.json({ error: 'Missing drawing or roundId' }, 400)
 
   if (file.size > 10 * 1024 * 1024) return c.json({ error: 'File too large' }, 400)
+  const validTypes = ['image/png', 'image/jpeg', 'image/webp']
+  if (!validTypes.includes(file.type)) return c.json({ error: 'Invalid file type (must be image/png, image/jpeg, or image/webp)' }, 400)
 
   const db = c.env.DB
   const round = await db.prepare('SELECT id, session_id, status FROM rounds WHERE id = ?')

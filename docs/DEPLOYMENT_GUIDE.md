@@ -30,14 +30,14 @@ This guide walks you through deploying **YoiKi** completely on **Cloudflare's Fr
 Run from the root of the repository:
 
 ```bash
-npx wrangler d1 create guess-draw-db
+npx wrangler d1 create yoiki-db
 ```
 
 Output will display your database binding configuration:
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "guess-draw-db"
+database_name = "yoiki-db"
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
@@ -45,7 +45,7 @@ Open [`worker/wrangler.toml`](file:///f:/Yoiki/worker/wrangler.toml) and paste t
 ```toml
 [[ d1_databases ]]
 binding = "DB"
-database_name = "guess-draw-db"
+database_name = "yoiki-db"
 database_id = "YOUR_ACTUAL_DATABASE_ID_HERE"
 ```
 
@@ -56,7 +56,7 @@ database_id = "YOUR_ACTUAL_DATABASE_ID_HERE"
 Create the R2 bucket for storing completed drawing artworks:
 
 ```bash
-npx wrangler r2 bucket create guess-draw-storage
+npx wrangler r2 bucket create yoiki-storage
 ```
 
 *(This matches the bucket binding `STORAGE` defined in [`worker/wrangler.toml`](file:///f:/Yoiki/worker/wrangler.toml)).*
@@ -70,7 +70,7 @@ Apply the versioned schema to your production D1 instance:
 ```bash
 npm run db:migrate:remote
 ```
-*(Or directly: `cd worker && npx wrangler d1 migrations apply guess-draw-db --remote`)*
+*(Or directly: `cd worker && npx wrangler d1 migrations apply yoiki-db --remote`)*
 
 You should see 16 commands executed successfully.
 
@@ -86,12 +86,12 @@ npm --prefix worker run deploy
 
 Upon completion, Wrangler will output your live Worker URL, for example:
 ```
-https://guess-draw-worker.<your-subdomain>.workers.dev
+https://yoiki-worker.<your-subdomain>.workers.dev
 ```
 
 Test the remote health check in your browser:
 ```bash
-curl https://guess-draw-worker.<your-subdomain>.workers.dev/api/health
+curl https://yoiki-worker.<your-subdomain>.workers.dev/api/health
 # Output: {"ok":true,"ts":1793633000000}
 ```
 
@@ -110,7 +110,7 @@ curl https://guess-draw-worker.<your-subdomain>.workers.dev/api/health
    - **Root directory**: `frontend`
 4. Add Environment Variable:
    - Variable name: `VITE_API_URL`
-   - Value: `https://guess-draw-worker.<your-subdomain>.workers.dev`
+   - Value: `https://yoiki-worker.<your-subdomain>.workers.dev`
 5. Click **Save and Deploy**.
 
 ### Option B: Deploying via Wrangler CLI
@@ -127,7 +127,7 @@ npx wrangler pages deploy dist --project-name=yoiki
 ```
 
 After deployment, in the Cloudflare Dashboard under **Pages** > **yoiki** > **Settings** > **Environment variables**, set:
-- `VITE_API_URL = https://guess-draw-worker.<your-subdomain>.workers.dev`
+- `VITE_API_URL = https://yoiki-worker.<your-subdomain>.workers.dev`
 Trigger a redeployment to bake the variable into the client bundle.
 
 ---
