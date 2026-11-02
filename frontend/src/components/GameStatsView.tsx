@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { apiFetch, getToken } from '../lib/api'
+import { apiFetch, getToken, getApiImageUrl } from '../lib/api'
 
 export interface GameStats {
   session: {
@@ -266,7 +266,7 @@ export default function GameStatsView({ sessionId, isHost, onClose, onRestart }:
                           <div className="aspect-4/3 bg-black rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center">
                             {playerDrawing ? (
                               <img
-                                src={`/api/drawings/image/${playerDrawing.id}`}
+                                src={getApiImageUrl(`/drawings/image/${playerDrawing.id}`, token)}
                                 alt={`${p.display_name} drawing`}
                                 className="w-full h-full object-contain"
                               />

@@ -12,7 +12,10 @@ export interface AuthContext {
 
 export async function resolveAuth(c: Context<any>): Promise<AuthContext | null> {
   const authHeader = c.req.header('Authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
+  let token = authHeader.replace(/^Bearer\s+/i, '').trim()
+  if (!token) {
+    token = c.req.query('token')?.trim() || ''
+  }
   if (!token) return null
 
   const db = (c.env as Env).DB

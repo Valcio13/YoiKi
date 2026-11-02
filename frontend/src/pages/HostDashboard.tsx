@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl } from '../lib/api'
+import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl, getApiImageUrl } from '../lib/api'
 import GameStatsView from '../components/GameStatsView'
 
 interface Session {
@@ -614,7 +614,7 @@ export default function HostDashboard() {
                       />
                     ) : drawingSub ? (
                       <img
-                        src={`/api/drawings/image/${drawingSub.id}`}
+                        src={getApiImageUrl(`/drawings/image/${drawingSub.id}`, token)}
                         alt={`${p.display_name} final drawing`}
                         className="w-full h-full object-contain"
                       />
@@ -740,7 +740,7 @@ export default function HostDashboard() {
                     {ch.image_key && (
                       <div className="rounded-lg overflow-hidden border border-gray-800 bg-black/60 max-h-40 flex items-center justify-center">
                         <img
-                          src={`/api/characters/${ch.id}/image`}
+                          src={getApiImageUrl(`/characters/${ch.id}/image`, token)}
                           alt={ch.name}
                           className="max-h-40 w-auto object-contain"
                         />
@@ -1173,7 +1173,7 @@ export default function HostDashboard() {
                   />
                 ) : zoomedDrawingSub ? (
                   <img
-                    src={`/api/drawings/image/${zoomedDrawingSub.id}`}
+                    src={getApiImageUrl(`/drawings/image/${zoomedDrawingSub.id}`, token)}
                     alt={`${zoomedPlayer.display_name} final drawing`}
                     className="max-w-[88vw] max-h-[76vh] w-auto h-auto object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-black"
                   />

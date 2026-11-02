@@ -40,6 +40,12 @@ export async function apiUpload<T>(
   return res.json()
 }
 
+export function getApiImageUrl(path: string, token?: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  const url = `${BASE}${cleanPath}`
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
+}
+
 export function getWsUrl(sessionId: string, token: string): string {
   if (API_URL) {
     const wsBase = API_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
