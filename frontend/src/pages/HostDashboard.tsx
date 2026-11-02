@@ -98,10 +98,57 @@ export default function HostDashboard() {
 
   const [showLinksModal, setShowLinksModal] = useState(false)
   const [viewStats, setViewStats] = useState(false)
+  const [zoomedPlayerId, setZoomedPlayerId] = useState<string | null>(null)
+  const [zoomLevel, setZoomLevel] = useState<number>(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const wsRef = useRef<WebSocket | null>(null)
+
+  // Keyboard navigation & zoom controls for Fullscreen / Focus Mode
+  useEffect(() => {
+    if (!zoomedPlayerId) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setZoomedPlayerId(null)
+      } else if (e.key === '+' || e.key === '=') {
+        setZoomLevel(z => Math.min(3, +(z + 0.25).toFixed(2)))
+      } else if (e.key === '-' || e.key === '_') {
+        setZoomLevel(z => Math.max(0.5, +(z - 0.25).toFixed(2)))
+      } else if (e.key === '0') {
+        setZoomLevel(1)
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'Tab') {
+        e.preventDefault()
+        setParticipants(current => {
+          if (current.length < 2) return current
+          const idx = current.findIndex(p => p.id === zoomedPlayerId)
+          const nextIdx = (idx + 1) % current.length
+          setZoomedPlayerId(current[nextIdx].id)
+          return current
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [zoomedPlayerId])
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.deltaY < 0) {
+      setZoomLevel(z => Math.min(3, +(z + 0.15).toFixed(2)))
+    } else {
+      setZoomLevel(z => Math.max(0.5, +(z - 0.15).toFixed(2)))
+    }
+  }
+
+  function toggleBrowserFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }
 
   // 1. Fetch Session Data
   const fetchData = useCallback(async () => {
@@ -521,7 +568,18 @@ export default function HostDashboard() {
                       <span className="text-xs text-gray-400">(Slot {p.slot})</span>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setZoomedPlayerId(p.id)
+                          setZoomLevel(1)
+                        }}
+                        className="px-2.5 py-1 bg-gray-800 hover:bg-indigo-600 text-gray-300 hover:text-white rounded-lg transition text-xs font-semibold flex items-center gap-1.5 border border-gray-700 hover:border-indigo-500 shadow-sm"
+                        title="Zoom In / Fullscreen View"
+                      >
+                        <span>⛶</span> Fullscreen
+                      </button>
+
                       {drawingSub && (
                         <span className="bg-emerald-950 text-emerald-300 border border-emerald-700 text-xs px-2 py-0.5 rounded-full font-semibold">
                           Submitted
@@ -532,7 +590,18 @@ export default function HostDashboard() {
                   </div>
 
                   {/* Canvas Viewport */}
-                  <div className="relative aspect-4/3 bg-black flex items-center justify-center overflow-hidden">
+                  <div
+                    onClick={() => {
+                      setZoomedPlayerId(p.id)
+                      setZoomLevel(1)
+                    }}
+                    className="relative aspect-4/3 bg-black flex items-center justify-center overflow-hidden cursor-zoom-in group"
+                    title="Click to Zoom In / Fullscreen"
+                  >
+                    {/* Hover zoom indicator */}
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs text-white border border-gray-700 pointer-events-none flex items-center gap-1.5 z-10 shadow-lg">
+                      <span>🔍</span> Click to Zoom
+                    </div>
                     {preview ? (
                       <img
                         src={preview}
@@ -986,6 +1055,182 @@ export default function HostDashboard() {
           </div>
         </div>
       )}
+
+      {/* 4. FULLSCREEN / ZOOM PLAYER VIEW MODAL */}
+      {(() => {
+        const zoomedPlayer = participants.find(p => p.id === zoomedPlayerId)
+        if (!zoomedPlayer) return null
+        const zoomedPreview = livePreviews[zoomedPlayer.id]
+        const zoomedDrawingSub = drawings.find(d => d.participant_id === zoomedPlayer.id && d.submitted === 1)
+        const isZoomedOnline = playerOnline[zoomedPlayer.id] !== false
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col select-none animate-in fade-in duration-150"
+            onWheel={handleWheel}
+          >
+            {/* Header */}
+            <div className="bg-zinc-950/90 border-b border-zinc-800 px-6 py-3.5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full ${isZoomedOnline ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                <div>
+                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+                    {zoomedPlayer.display_name}
+                    <span className="text-xs px-2.5 py-0.5 bg-zinc-800 text-zinc-300 font-semibold rounded-full border border-zinc-700">
+                      Slot {zoomedPlayer.slot}
+                    </span>
+                    {zoomedDrawingSub && (
+                      <span className="text-xs px-2.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold rounded-full">
+                        ✓ Drawing Submitted
+                      </span>
+                    )}
+                  </h3>
+                </div>
+              </div>
+
+              {/* Player Switching Bar (if mode is 2P) */}
+              {participants.length > 1 && (
+                <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
+                  {participants.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setZoomedPlayerId(p.id)
+                        setZoomLevel(1)
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                        p.id === zoomedPlayer.id
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>{p.id === zoomedPlayer.id ? '👁️' : '👤'}</span>
+                      {p.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Zoom Controls & Close */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1 text-xs">
+                  <button
+                    onClick={() => setZoomLevel(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                    className="px-2.5 py-1 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded font-bold"
+                    title="Zoom Out (-)"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => setZoomLevel(1)}
+                    className="px-2.5 py-1 text-indigo-300 font-mono font-bold hover:bg-zinc-800 rounded"
+                    title="Reset to 100% (0)"
+                  >
+                    {Math.round(zoomLevel * 100)}%
+                  </button>
+                  <button
+                    onClick={() => setZoomLevel(z => Math.min(3, +(z + 0.25).toFixed(2)))}
+                    className="px-2.5 py-1 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded font-bold"
+                    title="Zoom In (+)"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <button
+                  onClick={toggleBrowserFullscreen}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold rounded-xl transition flex items-center gap-1"
+                  title="Toggle Monitor Fullscreen"
+                >
+                  <span>⛶</span> Fullscreen
+                </button>
+
+                <button
+                  onClick={() => setZoomedPlayerId(null)}
+                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-red-900/80 text-zinc-300 hover:text-red-200 text-xs font-bold rounded-xl transition flex items-center gap-1 border border-zinc-700"
+                  title="Exit Zoom (Esc)"
+                >
+                  <span>✕</span> Close
+                </button>
+              </div>
+            </div>
+
+            {/* Canvas Viewport (Zoomable Area) */}
+            <div className="flex-1 overflow-auto flex items-center justify-center p-6 relative">
+              <div
+                className="relative max-w-full max-h-full flex items-center justify-center transition-transform duration-150 ease-out"
+                style={{ transform: `scale(${zoomLevel})` }}
+              >
+                {zoomedPreview ? (
+                  <img
+                    src={zoomedPreview}
+                    alt={`${zoomedPlayer.display_name} live drawing`}
+                    className="max-w-[88vw] max-h-[76vh] w-auto h-auto object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-black"
+                  />
+                ) : zoomedDrawingSub ? (
+                  <img
+                    src={`/api/drawings/image/${zoomedDrawingSub.id}`}
+                    alt={`${zoomedPlayer.display_name} final drawing`}
+                    className="max-w-[88vw] max-h-[76vh] w-auto h-auto object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-black"
+                  />
+                ) : (
+                  <div className="text-center text-zinc-600 p-12 bg-zinc-950 rounded-2xl border border-zinc-800">
+                    <div className="text-6xl mb-3 opacity-40">🖌️</div>
+                    <p className="text-lg font-bold text-zinc-400">Waiting for {zoomedPlayer.display_name}&apos;s drawing input...</p>
+                    <p className="text-xs text-zinc-600 mt-1">Live strokes will stream in real-time</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Fullscreen Scoring Bar */}
+            <div className="bg-zinc-950/95 border-t border-zinc-800 px-6 py-3 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                  {zoomedPlayer.display_name}&apos;s Score:
+                </span>
+                <span className="text-2xl font-black text-yellow-400 font-mono">
+                  {zoomedPlayer.points} <span className="text-xs font-medium text-zinc-500">PTS</span>
+                </span>
+              </div>
+
+              {/* Quick Points Award */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400 mr-1">Award Points:</span>
+                <button
+                  onClick={() => adjustPoints(zoomedPlayer.id, 10, 'Good Guess / Clue')}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-emerald-950 text-emerald-400 border border-zinc-800 hover:border-emerald-700 rounded-xl text-xs font-bold transition shadow"
+                >
+                  +10
+                </button>
+                <button
+                  onClick={() => adjustPoints(zoomedPlayer.id, 25, 'Great Performance')}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-emerald-950 text-emerald-400 border border-zinc-800 hover:border-emerald-700 rounded-xl text-xs font-bold transition shadow"
+                >
+                  +25
+                </button>
+                <button
+                  onClick={() => adjustPoints(zoomedPlayer.id, 50, 'Round Winner!')}
+                  className="px-4 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-indigo-200 border border-indigo-700 rounded-xl text-xs font-black transition shadow"
+                >
+                  +50 🏆 Winner
+                </button>
+                <button
+                  onClick={() => adjustPoints(zoomedPlayer.id, -10, 'Penalty / Correction')}
+                  className="px-2.5 py-1.5 bg-zinc-900 hover:bg-red-950 text-red-400 border border-zinc-800 hover:border-red-800 rounded-xl text-xs font-semibold transition"
+                >
+                  -10
+                </button>
+              </div>
+
+              {/* Shortcuts help */}
+              <div className="text-xs text-zinc-500 hidden md:block">
+                <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 font-mono text-[11px]">Esc</kbd> Exit · <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 font-mono text-[11px]">← / → / Tab</kbd> Switch Player · <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 font-mono text-[11px]">Scroll / +/-</kbd> Zoom
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
     </div>
   )
