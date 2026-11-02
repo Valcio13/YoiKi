@@ -1,6 +1,6 @@
-# 🎨 Yoiki — Multiplayer Character Guessing Game
+# 🎨 YoiKi — Multiplayer Character Guessing Game
 
-Yoiki is a private, real-time multiplayer character guessing game designed for live gaming sessions and OBS broadcast recording.
+YoiKi is a private, real-time multiplayer character guessing game designed for live gaming sessions and OBS broadcast recording.
 
 ---
 

@@ -130,7 +130,7 @@ export default function SpectatorView() {
           <span className="text-3xl">🎨</span>
           <div>
             <h1 className="text-2xl font-black tracking-wider text-indigo-400 uppercase">
-              Yoiki
+              YoiKi
             </h1>
             <p className="text-xs text-zinc-500 font-medium tracking-widest uppercase">
               OBS Live Broadcast Overlay
@@ -235,7 +235,7 @@ export default function SpectatorView() {
 
       {/* Broadcast Footer */}
       <footer className="text-center text-zinc-600 text-xs font-medium tracking-widest uppercase pt-3 border-t border-zinc-900">
-        Yoiki · Verbal Q&amp;A Multiplayer Game
+        YoiKi · Verbal Q&amp;A Multiplayer Game
       </footer>
 
     </div>
