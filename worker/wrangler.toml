@@ -23,6 +23,6 @@ binding = "STORAGE"
 bucket_name = "yoiki-storage"
 
 [vars]
-ENVIRONMENT = "development"
-# In production, set ALLOWED_ORIGINS to your Cloudflare Pages URL:
-# ALLOWED_ORIGINS = "https://yoiki.pages.dev"
+ENVIRONMENT = "production"
+# Set to your Cloudflare Pages domain(s), comma-separated. Also allows localhost for local testing:
+ALLOWED_ORIGINS = "https://yoiki.pages.dev,http://localhost:5173"
