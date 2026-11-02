@@ -1,10 +1,19 @@
 {
   "name": "guess-and-draw",
   "private": true,
-  "workspaces": ["frontend", "worker"],
+  "workspaces": [
+    "frontend",
+    "worker"
+  ],
   "scripts": {
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:worker": "cd worker && npm run dev",
-    "build": "cd frontend && npm run build"
+    "dev": "concurrently -k -n \"worker,frontend\" -c \"cyan,magenta\" \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "start": "npm run dev",
+    "dev:worker": "npm --prefix worker run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "db:migrate": "npm --prefix worker run db:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --port 8787",
+    "db:migrate": "wrangler d1 execute guess-draw-db --local --file=../migrations/0001_init.sql",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types"
   },
