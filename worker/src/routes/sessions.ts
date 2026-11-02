@@ -72,7 +72,9 @@ sessionsRouter.get('/:id', async (c) => {
 
   const db = c.env.DB
   const session = await db.prepare(
-    'SELECT id, mode, status, current_round, created_at FROM sessions WHERE id = ?'
+    auth.role === 'host'
+      ? 'SELECT id, mode, status, current_round, created_at, spectator_token FROM sessions WHERE id = ?'
+      : 'SELECT id, mode, status, current_round, created_at FROM sessions WHERE id = ?'
   ).bind(sessionId).first()
   if (!session) return c.json({ error: 'Not found' }, 404)
 

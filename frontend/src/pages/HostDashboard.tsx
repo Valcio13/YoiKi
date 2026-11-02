@@ -7,6 +7,7 @@ interface Session {
   mode: string
   status: string
   current_round: number
+  spectator_token?: string
 }
 
 interface Participant {
@@ -307,6 +308,7 @@ export default function HostDashboard() {
       setNewCharName('')
       setCharImageFile(null)
       setShowCharModal(false)
+      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'character_created' }))
       await fetchData()
     } catch (e: any) {
       alert(e.message)
@@ -327,6 +329,7 @@ export default function HostDashboard() {
     if (!confirm('Delete this character and its hints?')) return
     try {
       await apiFetch(`/characters/${characterId}`, { method: 'DELETE' }, token)
+      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'character_deleted' }))
       await fetchData()
     } catch (e: any) {
       alert(e.message)
@@ -358,6 +361,7 @@ export default function HostDashboard() {
       setNewHintText('')
       setHintImageFile(null)
       setHintTargetCharId(null)
+      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'hint_created' }))
       await fetchData()
     } catch (e: any) {
       alert(e.message)
@@ -418,10 +422,10 @@ export default function HostDashboard() {
           </button>
 
           <a
-            href={`/spectator.html?session=${sessionId}&role=spectator`}
+            href={`/?token=${session?.spectator_token || ''}&role=spectator&session=${sessionId}`}
             onClick={(e) => {
               e.preventDefault()
-              window.open(`/?role=spectator&session=${sessionId}`, '_blank', 'width=1280,height=720')
+              window.open(`/?token=${session?.spectator_token || ''}&role=spectator&session=${sessionId}`, '_blank', 'width=1280,height=720')
             }}
             className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-black text-xs font-bold rounded-lg transition shadow flex items-center gap-1.5"
           >
@@ -1035,11 +1039,11 @@ export default function HostDashboard() {
                 <div className="flex gap-2">
                   <input
                     readOnly
-                    value={`${origin}?role=spectator&session=${sessionId}`}
+                    value={`${origin}?token=${session?.spectator_token || ''}&role=spectator&session=${sessionId}`}
                     className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 font-mono"
                   />
                   <button
-                    onClick={() => navigator.clipboard.writeText(`${origin}?role=spectator&session=${sessionId}`)}
+                    onClick={() => navigator.clipboard.writeText(`${origin}?token=${session?.spectator_token || ''}&role=spectator&session=${sessionId}`)}
                     className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-semibold"
                   >Copy</button>
                 </div>
