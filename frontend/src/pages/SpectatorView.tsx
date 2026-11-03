@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiFetch, getToken, getSessionId, getWsUrl, getApiImageUrl } from '../lib/api'
+import { apiFetch, getToken, getSessionId, getWsUrl } from '../lib/api'
 import GameStatsView from '../components/GameStatsView'
+import SecureImage from '../components/SecureImage'
 
 interface Participant {
   id: string
@@ -202,8 +203,9 @@ export default function SpectatorView() {
                         className="w-full h-full object-contain"
                       />
                     ) : drawingSub ? (
-                      <img
-                        src={getApiImageUrl(`/drawings/image/${drawingSub.id}`, token)}
+                      <SecureImage
+                        apiPath={`/drawings/image/${drawingSub.id}`}
+                        token={token}
                         alt={`${p.display_name} final drawing`}
                         className="w-full h-full object-contain"
                       />

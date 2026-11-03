@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { apiFetch, getToken, getApiImageUrl } from '../lib/api'
+import { apiFetch, getToken } from '../lib/api'
+import SecureImage from './SecureImage'
 
 export interface GameStats {
   session: {
@@ -265,8 +266,9 @@ export default function GameStatsView({ sessionId, isHost, onClose, onRestart }:
                           {/* Drawing Display */}
                           <div className="aspect-4/3 bg-black rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center">
                             {playerDrawing ? (
-                              <img
-                                src={getApiImageUrl(`/drawings/image/${playerDrawing.id}`, token)}
+                              <SecureImage
+                                apiPath={`/drawings/image/${playerDrawing.id}`}
+                                token={token}
                                 alt={`${p.display_name} drawing`}
                                 className="w-full h-full object-contain"
                               />

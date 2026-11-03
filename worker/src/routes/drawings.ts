@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { validateImageFile } from '../lib/imageValidator'
 
 export const drawingsRouter = new Hono<{ Bindings: Env }>()
 
@@ -15,18 +16,18 @@ drawingsRouter.post('/submit', async (c) => {
   const roundId = formData.get('roundId') as string | null
   if (!file || !roundId) return c.json({ error: 'Missing drawing or roundId' }, 400)
 
-  if (file.size > 10 * 1024 * 1024) return c.json({ error: 'File too large' }, 400)
-  const validTypes = ['image/png', 'image/jpeg', 'image/webp']
-  if (!validTypes.includes(file.type)) return c.json({ error: 'Invalid file type (must be image/png, image/jpeg, or image/webp)' }, 400)
+  const validation = await validateImageFile(file, 10 * 1024 * 1024)
+  if (!validation.valid) return c.json({ error: validation.error }, 400)
 
   const db = c.env.DB
   const round = await db.prepare('SELECT id, session_id, status FROM rounds WHERE id = ?')
     .bind(roundId).first<any>()
   if (!round || round.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
 
-  const key = `drawings/${auth.sessionId}/${roundId}/${auth.participantId}.png`
+  const ext = validation.mimeType === 'image/webp' ? 'webp' : 'png'
+  const key = `drawings/${auth.sessionId}/${roundId}/${auth.participantId}.${ext}`
   await c.env.STORAGE.put(key, file.stream(), {
-    httpMetadata: { contentType: 'image/png' },
+    httpMetadata: { contentType: validation.mimeType },
   })
 
   const drawingId = newId()
@@ -106,6 +107,9 @@ drawingsRouter.get('/image/:drawingId', async (c) => {
   if (!obj) return c.json({ error: 'Not found' }, 404)
 
   return new Response(obj.body, {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=3600' },
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/png',
+      'Cache-Control': 'private, max-age=3600',
+    },
   })
 })

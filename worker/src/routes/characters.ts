@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { validateImageFile } from '../lib/imageValidator'
 
 export const charactersRouter = new Hono<{ Bindings: Env }>()
 
@@ -28,6 +29,48 @@ charactersRouter.post('/', async (c) => {
   `).bind(id, body.sessionId, body.roundId, body.heldBySlot, body.guessedBySlot, body.name.trim()).run()
 
   return c.json({ id }, 201)
+})
+
+// GET /api/characters/:id/image — Serve character image (role-checked)
+// Note: Must be registered BEFORE /:sessionId/:roundId to prevent route parameter collision!
+charactersRouter.get('/:id/image', async (c) => {
+  const auth = await resolveAuth(c)
+  if (!auth) return c.json({ error: 'Unauthorized' }, 401)
+
+  const characterId = c.req.param('id')
+  const db = c.env.DB
+  const character = await db.prepare(`
+    SELECT c.session_id, c.held_by_slot, c.guessed_by_slot, c.image_key, c.revealed, s.status as session_status
+    FROM characters c
+    JOIN sessions s ON c.session_id = s.id
+    WHERE c.id = ?
+  `).bind(characterId).first<any>()
+
+  if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
+
+  const isFinalOrRevealed = character.revealed === 1 || character.session_status === 'ended'
+
+  // Spectator: only if revealed or game ended
+  if (auth.role === 'spectator' && !isFinalOrRevealed) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  // Player: only if they hold it or it is revealed or game ended
+  if (auth.role === 'player' && character.held_by_slot !== auth.participantSlot && !isFinalOrRevealed) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  if (!character.image_key) return c.json({ error: 'No image' }, 404)
+
+  const obj = await c.env.STORAGE.get(character.image_key)
+  if (!obj) return c.json({ error: 'Image not found' }, 404)
+
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'private, max-age=3600',
+    },
+  })
 })
 
 // GET /api/characters/:sessionId/:roundId — Get characters (role-filtered)
@@ -111,60 +154,19 @@ charactersRouter.post('/:id/image', async (c) => {
   const file = formData.get('image') as File | null
   if (!file) return c.json({ error: 'No image provided' }, 400)
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-  if (!validTypes.includes(file.type)) return c.json({ error: 'Invalid file type' }, 400)
-  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 400)
+  const validation = await validateImageFile(file, 5 * 1024 * 1024)
+  if (!validation.valid) return c.json({ error: validation.error }, 400)
 
-  const key = `characters/${auth.sessionId}/${characterId}/${Date.now()}`
+  const ext = validation.mimeType === 'image/webp' ? 'webp' : validation.mimeType === 'image/png' ? 'png' : 'jpg'
+  const key = `characters/${auth.sessionId}/${characterId}/${Date.now()}.${ext}`
   await c.env.STORAGE.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type },
+    httpMetadata: { contentType: validation.mimeType },
   })
 
   await db.prepare('UPDATE characters SET image_key = ? WHERE id = ?')
     .bind(key, characterId).run()
 
   return c.json({ key })
-})
-
-// GET /api/characters/:id/image — Serve character image (role-checked)
-charactersRouter.get('/:id/image', async (c) => {
-  const auth = await resolveAuth(c)
-  if (!auth) return c.json({ error: 'Unauthorized' }, 401)
-
-  const characterId = c.req.param('id')
-  const db = c.env.DB
-  const character = await db.prepare(`
-    SELECT c.session_id, c.held_by_slot, c.guessed_by_slot, c.image_key, c.revealed, s.status as session_status
-    FROM characters c
-    JOIN sessions s ON c.session_id = s.id
-    WHERE c.id = ?
-  `).bind(characterId).first<any>()
-
-  if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
-
-  const isFinalOrRevealed = character.revealed === 1 || character.session_status === 'ended'
-
-  // Spectator: only if revealed or game ended
-  if (auth.role === 'spectator' && !isFinalOrRevealed) {
-    return c.json({ error: 'Forbidden' }, 403)
-  }
-
-  // Player: only if they hold it or it is revealed or game ended
-  if (auth.role === 'player' && character.held_by_slot !== auth.participantSlot && !isFinalOrRevealed) {
-    return c.json({ error: 'Forbidden' }, 403)
-  }
-
-  if (!character.image_key) return c.json({ error: 'No image' }, 404)
-
-  const obj = await c.env.STORAGE.get(character.image_key)
-  if (!obj) return c.json({ error: 'Image not found' }, 404)
-
-  return new Response(obj.body, {
-    headers: {
-      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
-      'Cache-Control': 'private, max-age=3600',
-    },
-  })
 })
 
 // DELETE /api/characters/:id — Host deletes a character

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { validateImageFile } from '../lib/imageValidator'
 
 export const hintsRouter = new Hono<{ Bindings: Env }>()
 
@@ -48,13 +49,13 @@ hintsRouter.post('/:id/image', async (c) => {
   const file = formData.get('image') as File | null
   if (!file) return c.json({ error: 'No image provided' }, 400)
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-  if (!validTypes.includes(file.type)) return c.json({ error: 'Invalid file type' }, 400)
-  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 400)
+  const validation = await validateImageFile(file, 5 * 1024 * 1024)
+  if (!validation.valid) return c.json({ error: validation.error }, 400)
 
-  const key = `hints/${auth.sessionId}/${hintId}/${Date.now()}`
+  const ext = validation.mimeType === 'image/webp' ? 'webp' : validation.mimeType === 'image/png' ? 'png' : 'jpg'
+  const key = `hints/${auth.sessionId}/${hintId}/${Date.now()}.${ext}`
   await c.env.STORAGE.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type },
+    httpMetadata: { contentType: validation.mimeType },
   })
 
   await db.prepare('UPDATE hints SET image_key = ? WHERE id = ?').bind(key, hintId).run()

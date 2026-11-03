@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl, getApiImageUrl } from '../lib/api'
+import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl } from '../lib/api'
 import GameStatsView from '../components/GameStatsView'
+import SecureImage from '../components/SecureImage'
+import { compressImage, COMPRESSION_PROFILES } from '../lib/imageCompression'
 
 interface Session {
   id: string
@@ -300,8 +302,9 @@ export default function HostDashboard() {
       }, token)
 
       if (charImageFile) {
+        const compressed = await compressImage(charImageFile, COMPRESSION_PROFILES.character)
         const fd = new FormData()
-        fd.append('image', charImageFile)
+        fd.append('image', compressed)
         await apiUpload(`/characters/${res.id}/image`, fd, token)
       }
 
@@ -353,8 +356,9 @@ export default function HostDashboard() {
       }, token)
 
       if (hintImageFile) {
+        const compressed = await compressImage(hintImageFile, COMPRESSION_PROFILES.hint)
         const fd = new FormData()
-        fd.append('image', hintImageFile)
+        fd.append('image', compressed)
         await apiUpload(`/hints/${res.id}/image`, fd, token)
       }
 
@@ -613,8 +617,9 @@ export default function HostDashboard() {
                         className="w-full h-full object-contain"
                       />
                     ) : drawingSub ? (
-                      <img
-                        src={getApiImageUrl(`/drawings/image/${drawingSub.id}`, token)}
+                      <SecureImage
+                        apiPath={`/drawings/image/${drawingSub.id}`}
+                        token={token}
                         alt={`${p.display_name} final drawing`}
                         className="w-full h-full object-contain"
                       />
@@ -739,8 +744,9 @@ export default function HostDashboard() {
                     {/* Image if uploaded */}
                     {ch.image_key && (
                       <div className="rounded-lg overflow-hidden border border-gray-800 bg-black/60 max-h-40 flex items-center justify-center">
-                        <img
-                          src={getApiImageUrl(`/characters/${ch.id}/image`, token)}
+                        <SecureImage
+                          apiPath={`/characters/${ch.id}/image`}
+                          token={token}
                           alt={ch.name}
                           className="max-h-40 w-auto object-contain"
                         />
@@ -1172,8 +1178,9 @@ export default function HostDashboard() {
                     className="max-w-[88vw] max-h-[76vh] w-auto h-auto object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-black"
                   />
                 ) : zoomedDrawingSub ? (
-                  <img
-                    src={getApiImageUrl(`/drawings/image/${zoomedDrawingSub.id}`, token)}
+                  <SecureImage
+                    apiPath={`/drawings/image/${zoomedDrawingSub.id}`}
+                    token={token}
                     alt={`${zoomedPlayer.display_name} final drawing`}
                     className="max-w-[88vw] max-h-[76vh] w-auto h-auto object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-black"
                   />

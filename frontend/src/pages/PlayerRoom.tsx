@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl, getApiImageUrl } from '../lib/api'
+import { apiFetch, apiUpload, getToken, getSessionId, getWsUrl } from '../lib/api'
 import GameStatsView from '../components/GameStatsView'
+import SecureImage from '../components/SecureImage'
+import { compressImage, COMPRESSION_PROFILES } from '../lib/imageCompression'
 
 interface Participant {
   id: string
@@ -234,8 +236,9 @@ export default function PlayerRoom() {
         if (!currentRound) return
         setSubmitting(true)
         try {
+          const compressed = await compressImage(data.blob, COMPRESSION_PROFILES.drawing)
           const formData = new FormData()
-          formData.append('drawing', data.blob, 'drawing.png')
+          formData.append('drawing', compressed, compressed.name || 'drawing.webp')
           formData.append('roundId', currentRound.id)
 
           await apiUpload('/drawings/submit', formData, token)
@@ -397,7 +400,7 @@ export default function PlayerRoom() {
                   {heldCharacter?.image_key && (
                     <button
                       onClick={() => setZoomedImage({
-                        src: getApiImageUrl(`/characters/${heldCharacter.id}/image`, token),
+                        src: `/characters/${heldCharacter.id}/image`,
                         title: heldCharacter.name,
                         subtitle: `Reference image for ${opponentName}'s target`
                       })}
@@ -427,15 +430,16 @@ export default function PlayerRoom() {
                         
                         <div
                           onClick={() => setZoomedImage({
-                            src: getApiImageUrl(`/characters/${heldCharacter.id}/image`, token),
+                            src: `/characters/${heldCharacter.id}/image`,
                             title: heldCharacter.name,
                             subtitle: `Reference image for ${opponentName}'s target`
                           })}
                           className="relative group rounded-xl overflow-hidden border border-emerald-800/60 bg-black/60 flex items-center justify-center max-h-52 cursor-zoom-in shadow-inner"
                           title="Click to view full-resolution reference image"
                         >
-                          <img
-                            src={getApiImageUrl(`/characters/${heldCharacter.id}/image`, token)}
+                          <SecureImage
+                            apiPath={`/characters/${heldCharacter.id}/image`}
+                            token={token}
                             alt={heldCharacter.name}
                             className="max-h-52 w-auto object-contain transition group-hover:scale-105"
                           />
@@ -500,14 +504,15 @@ export default function PlayerRoom() {
                         {revealedGuessChar.image_key && (
                           <div
                             onClick={() => setZoomedImage({
-                              src: getApiImageUrl(`/characters/${revealedGuessChar.id}/image`, token),
+                              src: `/characters/${revealedGuessChar.id}/image`,
                               title: revealedGuessChar.name,
                               subtitle: 'Revealed Target Answer'
                             })}
                             className="mt-2 rounded-lg overflow-hidden border border-indigo-700/40 bg-black/40 cursor-zoom-in"
                           >
-                            <img
-                              src={getApiImageUrl(`/characters/${revealedGuessChar.id}/image`, token)}
+                            <SecureImage
+                              apiPath={`/characters/${revealedGuessChar.id}/image`}
+                              token={token}
                               alt={revealedGuessChar.name}
                               className="max-h-40 mx-auto object-contain"
                             />
@@ -578,14 +583,15 @@ export default function PlayerRoom() {
                                 {hint.has_image && (
                                   <div
                                     onClick={() => setZoomedImage({
-                                      src: getApiImageUrl(`/hints/${hint.id}/image`, token),
+                                      src: `/hints/${hint.id}/image`,
                                       title: `Hint #${idx + 1} Image Clue`,
                                     })}
                                     className="mt-2 rounded-lg overflow-hidden border border-indigo-800/40 bg-black/40 cursor-zoom-in group relative"
                                     title="Click to view large hint image"
                                   >
-                                    <img
-                                      src={getApiImageUrl(`/hints/${hint.id}/image`, token)}
+                                    <SecureImage
+                                      apiPath={`/hints/${hint.id}/image`}
+                                      token={token}
                                       alt={`Hint ${idx + 1}`}
                                       className="max-h-36 w-auto mx-auto object-contain transition group-hover:scale-105"
                                     />
@@ -710,7 +716,7 @@ export default function PlayerRoom() {
                       onClick={() => {
                         if (heldCharacter.image_key) {
                           setZoomedImage({
-                            src: getApiImageUrl(`/characters/${heldCharacter.id}/image`, token),
+                            src: `/characters/${heldCharacter.id}/image`,
                             title: heldCharacter.name,
                             subtitle: `Secret you hold for ${opponentName}`
                           })
@@ -851,8 +857,9 @@ export default function PlayerRoom() {
             </div>
 
             <div className="flex-1 overflow-auto flex items-center justify-center bg-black/60 rounded-xl p-2 min-h-[300px]">
-              <img
-                src={zoomedImage.src}
+              <SecureImage
+                apiPath={zoomedImage.src}
+                token={token}
                 alt={zoomedImage.title}
                 className="max-h-[75vh] max-w-full w-auto h-auto object-contain rounded-lg"
               />

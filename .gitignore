@@ -4,6 +4,7 @@ dist/
 klecks-repo/
 *.log
 .DS_Store
+scratch/
 
 # Environment files
 .env
