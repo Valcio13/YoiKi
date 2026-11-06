@@ -56,7 +56,7 @@ export default function PlayerRoom() {
   const [opponentName, setOpponentName] = useState<string>('Opponent')
 
   const [heldCharacter, setHeldCharacter] = useState<Character | null>(null)
-  const [guessTargetCharId, setGuessTargetCharId] = useState<string | null>(null)
+  const [_guessTargetCharId, setGuessTargetCharId] = useState<string | null>(null)
   const [revealedGuessChar, setRevealedGuessChar] = useState<Character | null>(null)
 
   const [hints, setHints] = useState<Hint[]>([])
@@ -111,6 +111,9 @@ export default function PlayerRoom() {
   const isFetchingRef = useRef(false)
   const hasPendingFetchRef = useRef(false)
   const terminalErrorRef = useRef(false)
+  const lastFetchTimeRef = useRef<number>(0)
+  const guessTargetCharIdRef = useRef<string | null>(null)
+  const lastVisibilityFetchRef = useRef<number>(Date.now())
 
   // 1. Fetch player & session data (scoped & deduplicated)
   const fetchData = useCallback(async (scope?: string) => {
@@ -137,10 +140,11 @@ export default function PlayerRoom() {
       }
 
       // 2. Scoped hint refresh
-      if (scope === 'hint' && guessTargetCharId) {
+      const targetCharId = guessTargetCharIdRef.current
+      if (scope === 'hint' && targetCharId) {
         const [me, hList] = await Promise.all([
           apiFetch<Participant>('/participants/me', {}, token),
-          apiFetch<Hint[]>(`/hints/${guessTargetCharId}`, {}, token),
+          apiFetch<Hint[]>(`/hints/${targetCharId}`, {}, token),
         ])
         setParticipant(me)
         setHints(hList)
@@ -180,6 +184,7 @@ export default function PlayerRoom() {
           // Character player is guessing
           const guessing = chars.find(c => c.guessed_by_slot === me.slot)
           if (guessing) {
+            guessTargetCharIdRef.current = guessing.id
             setGuessTargetCharId(guessing.id)
             if (guessing.revealed === 1 || sessionData.session.status === 'results') {
               setRevealedGuessChar(guessing)
@@ -199,6 +204,7 @@ export default function PlayerRoom() {
         }
       }
       setError('')
+      lastFetchTimeRef.current = Date.now()
     } catch (e: any) {
       const errMsg = e?.message || String(e)
       if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
@@ -213,22 +219,24 @@ export default function PlayerRoom() {
         fetchData()
       }
     }
-  }, [token, sessionId, guessTargetCharId])
+  }, [token, sessionId])
 
-  // Polling fallback (45s for missed events), visibility change, and initial load
+  // Polling fallback (90s for missed events), throttled visibility change, and initial load
   useEffect(() => {
     fetchData()
 
-    // 45s fallback interval for missed events
+    // 90s fallback interval for missed events
     const interval = setInterval(() => {
       if (!terminalErrorRef.current) {
         fetchData()
       }
-    }, 45000)
+    }, 90000)
 
-    // Immediate refresh on tab/page becoming visible again
+    // Throttled refresh on tab/page becoming visible again (min 30s cooldown)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+      const now = Date.now()
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current && (now - lastVisibilityFetchRef.current > 30000)) {
+        lastVisibilityFetchRef.current = now
         fetchData()
       }
     }
@@ -344,8 +352,8 @@ export default function PlayerRoom() {
     setPurchasingHintId(hintId)
     try {
       const res = await apiFetch<any>(`/hints/${hintId}/purchase`, { method: 'POST' }, token)
-      if (res.ok) {
-        await fetchData()
+      if (res.ok && (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN)) {
+        await fetchData('hint')
       }
     } catch (e: any) {
       alert(e.message || 'Failed to purchase hint')

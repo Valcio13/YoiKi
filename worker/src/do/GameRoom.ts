@@ -17,7 +17,7 @@ export class GameRoom extends DurableObject<Env> {
     const url = new URL(request.url)
 
     // Internal endpoint for Worker REST endpoints to broadcast invalidation
-    if (url.pathname === '/internal/broadcast' && request.method === 'POST') {
+    if ((url.pathname === '/internal/broadcast' || url.pathname === '/broadcast') && request.method === 'POST') {
       try {
         const body = await request.json<{ sessionId: string; data: any; target?: 'all' | 'host_and_spectators' }>()
         if (body.target === 'host_and_spectators') {

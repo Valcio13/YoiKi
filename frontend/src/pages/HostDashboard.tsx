@@ -156,6 +156,8 @@ export default function HostDashboard() {
   const isFetchingRef = useRef(false)
   const hasPendingFetchRef = useRef(false)
   const terminalErrorRef = useRef(false)
+  const lastFetchTimeRef = useRef<number>(0)
+  const lastVisibilityFetchRef = useRef<number>(Date.now())
 
   // 1. Fetch Session Data (scoped & deduplicated)
   const fetchData = useCallback(async (scope?: string) => {
@@ -177,6 +179,7 @@ export default function HostDashboard() {
         setSession(sessData.session)
         setParticipants(sessData.participants)
         setTxHistory(txs)
+        lastFetchTimeRef.current = Date.now()
         return
       }
 
@@ -217,6 +220,7 @@ export default function HostDashboard() {
       const txs = await apiFetch<PointTx[]>(`/points/${sessionId}/history`, {}, token)
       setTxHistory(txs)
       setError('')
+      lastFetchTimeRef.current = Date.now()
     } catch (e: any) {
       const errMsg = e?.message || String(e)
       if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
@@ -233,20 +237,22 @@ export default function HostDashboard() {
     }
   }, [sessionId, token])
 
-  // Polling fallback (45s for missed events), visibility change, and initial load
+  // Polling fallback (90s for missed events), throttled visibility change, and initial load
   useEffect(() => {
     fetchData()
 
-    // 45s fallback interval for missed events
+    // 90s fallback interval for missed events
     const interval = setInterval(() => {
       if (!terminalErrorRef.current) {
         fetchData()
       }
-    }, 45000)
+    }, 90000)
 
-    // Immediate refresh on tab/page becoming visible again
+    // Throttled refresh on tab/page becoming visible again (min 30s cooldown)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+      const now = Date.now()
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current && (now - lastVisibilityFetchRef.current > 30000)) {
+        lastVisibilityFetchRef.current = now
         fetchData()
       }
     }
@@ -319,9 +325,9 @@ export default function HostDashboard() {
         method: 'POST',
         body: JSON.stringify({ sessionId }),
       }, token)
-      // Broadcast state update
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'round_started' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('round')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -333,8 +339,9 @@ export default function HostDashboard() {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       }, token)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'status_changed', status }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('session')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -347,8 +354,9 @@ export default function HostDashboard() {
         method: 'POST',
         body: JSON.stringify({ participantId, delta, reason }),
       }, token)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'points_adjusted' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('points')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -382,8 +390,9 @@ export default function HostDashboard() {
       setNewCharName('')
       setCharImageFile(null)
       setShowCharModal(false)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'character_created' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('character')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -392,8 +401,9 @@ export default function HostDashboard() {
   async function revealCharacter(characterId: string) {
     try {
       await apiFetch(`/characters/${characterId}/reveal`, { method: 'PATCH' }, token)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'character_revealed' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('character')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -403,8 +413,9 @@ export default function HostDashboard() {
     if (!confirm('Delete this character and its hints?')) return
     try {
       await apiFetch(`/characters/${characterId}`, { method: 'DELETE' }, token)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'character_deleted' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('character')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -436,8 +447,9 @@ export default function HostDashboard() {
       setNewHintText('')
       setHintImageFile(null)
       setHintTargetCharId(null)
-      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'hint_created' }))
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('hint')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -447,7 +459,9 @@ export default function HostDashboard() {
     if (!confirm('Delete this hint?')) return
     try {
       await apiFetch(`/hints/${hintId}`, { method: 'DELETE' }, token)
-      await fetchData()
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        await fetchData('hint')
+      }
     } catch (e: any) {
       alert(e.message)
     }
@@ -583,9 +597,10 @@ export default function HostDashboard() {
                   onClick={async () => {
                     if (confirm('Restart game session for a new match? Points will reset to 100.')) {
                       await apiFetch(`/sessions/${sessionId}/restart`, { method: 'POST' }, token)
-                      wsRef.current?.send(JSON.stringify({ type: 'state_update', action: 'session_restarted' }))
                       setViewStats(false)
-                      await fetchData()
+                      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+                        await fetchData('session')
+                      }
                     }
                   }}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl transition flex items-center gap-2"

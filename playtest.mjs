@@ -84,7 +84,7 @@ async function run() {
     // 4. Host starts Round 1
     log('Step 3: Host starts Round 1...');
     await pageHost.click('button:has-text("Start Round 1")');
-    await pageHost.waitForSelector('text=Round 1');
+    await pageHost.waitForSelector('button:has-text("End Round")');
     log('✓ Round 1 active on Host');
 
     // 5. Host configures characters

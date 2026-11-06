@@ -50,6 +50,8 @@ export default function SpectatorView() {
   const isFetchingRef = useRef(false)
   const hasPendingFetchRef = useRef(false)
   const terminalErrorRef = useRef(false)
+  const lastFetchTimeRef = useRef<number>(0)
+  const lastVisibilityFetchRef = useRef<number>(Date.now())
 
   const fetchData = useCallback(async (_scope?: string) => {
     if (!sessionId || terminalErrorRef.current) return
@@ -83,6 +85,7 @@ export default function SpectatorView() {
           }
         }
       }
+      lastFetchTimeRef.current = Date.now()
     } catch (e: any) {
       const errMsg = e?.message || String(e)
       if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
@@ -97,20 +100,22 @@ export default function SpectatorView() {
     }
   }, [sessionId, token])
 
-  // Polling fallback (45s for missed events), visibility change, and initial load
+  // Polling fallback (90s for missed events), throttled visibility change, and initial load
   useEffect(() => {
     fetchData()
 
-    // 45s fallback interval for missed events
+    // 90s fallback interval for missed events
     const interval = setInterval(() => {
       if (!terminalErrorRef.current) {
         fetchData()
       }
-    }, 45000)
+    }, 90000)
 
-    // Immediate refresh on tab/page becoming visible again
+    // Throttled refresh on tab/page becoming visible again (min 30s cooldown)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+      const now = Date.now()
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current && (now - lastVisibilityFetchRef.current > 30000)) {
+        lastVisibilityFetchRef.current = now
         fetchData()
       }
     }
