@@ -153,9 +153,34 @@ export default function HostDashboard() {
     }
   }
 
-  // 1. Fetch Session Data
-  const fetchData = useCallback(async () => {
+  const isFetchingRef = useRef(false)
+  const hasPendingFetchRef = useRef(false)
+  const terminalErrorRef = useRef(false)
+
+  // 1. Fetch Session Data (scoped & deduplicated)
+  const fetchData = useCallback(async (scope?: string) => {
+    if (!sessionId || !token || terminalErrorRef.current) return
+
+    if (isFetchingRef.current) {
+      hasPendingFetchRef.current = true
+      return
+    }
+
+    isFetchingRef.current = true
     try {
+      // 1. Quick point-only refresh
+      if (scope === 'points') {
+        const [sessData, txs] = await Promise.all([
+          apiFetch<{ session: Session; participants: Participant[] }>(`/sessions/${sessionId}`, {}, token),
+          apiFetch<PointTx[]>(`/points/${sessionId}/history`, {}, token),
+        ])
+        setSession(sessData.session)
+        setParticipants(sessData.participants)
+        setTxHistory(txs)
+        return
+      }
+
+      // 2. Full or multi-scope refresh
       const data = await apiFetch<{ session: Session; participants: Participant[] }>(
         `/sessions/${sessionId}`, {}, token
       )
@@ -173,13 +198,14 @@ export default function HostDashboard() {
           const chars = await apiFetch<Character[]>(`/characters/${sessionId}/${active.id}`, {}, token)
           setCharacters(chars)
 
-          // Fetch hints for each character
-          const hintsMap: Record<string, Hint[]> = {}
-          for (const ch of chars) {
-            const hList = await apiFetch<Hint[]>(`/hints/${ch.id}`, {}, token)
-            hintsMap[ch.id] = hList
-          }
-          setHintsByChar(hintsMap)
+          // Fetch hints for each character in parallel (Phase 2 optimization)
+          const hintEntries = await Promise.all(
+            chars.map(async (ch) => {
+              const hList = await apiFetch<Hint[]>(`/hints/${ch.id}`, {}, token)
+              return [ch.id, hList] as const
+            })
+          )
+          setHintsByChar(Object.fromEntries(hintEntries))
 
           // Fetch drawings
           const drws = await apiFetch<Drawing[]>(`/drawings/${active.id}`, {}, token)
@@ -190,35 +216,78 @@ export default function HostDashboard() {
       // Fetch point tx history
       const txs = await apiFetch<PointTx[]>(`/points/${sessionId}/history`, {}, token)
       setTxHistory(txs)
+      setError('')
     } catch (e: any) {
-      setError(e.message)
+      const errMsg = e?.message || String(e)
+      if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
+        terminalErrorRef.current = true
+      }
+      setError(errMsg)
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
+      if (hasPendingFetchRef.current && !terminalErrorRef.current) {
+        hasPendingFetchRef.current = false
+        fetchData()
+      }
     }
   }, [sessionId, token])
 
+  // Polling fallback (45s for missed events), visibility change, and initial load
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 4000)
-    return () => clearInterval(interval)
+
+    // 45s fallback interval for missed events
+    const interval = setInterval(() => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }, 45000)
+
+    // Immediate refresh on tab/page becoming visible again
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetchData])
 
-  // 2. WebSocket for live drawing streaming
+  // 2. WebSocket for live drawing streaming & real-time invalidation
   useEffect(() => {
     if (!sessionId || !token) return
     const wsUrl = getWsUrl(sessionId, token)
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
+    // Refresh immediately upon WS open/reconnect
+    ws.onopen = () => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+
+        // Real-time invalidation from Worker or clients
+        if (msg.type === 'invalidate') {
+          fetchData(msg.scope)
+          return
+        }
 
         if (msg.type === 'preview' && msg.participantId && msg.data) {
           setLivePreviews(prev => ({
             ...prev,
             [msg.participantId]: msg.data,
           }))
+          return
         }
 
         if (msg.type === 'player_status') {
@@ -226,10 +295,12 @@ export default function HostDashboard() {
             ...prev,
             [msg.participantId]: msg.online,
           }))
+          return
         }
 
-        if (msg.type === 'drawing_submitted') {
+        if (msg.type === 'drawing_submitted' || msg.type === 'state_update') {
           fetchData()
+          return
         }
       } catch {
         // Ignore

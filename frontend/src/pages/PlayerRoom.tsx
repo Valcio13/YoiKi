@@ -56,7 +56,7 @@ export default function PlayerRoom() {
   const [opponentName, setOpponentName] = useState<string>('Opponent')
 
   const [heldCharacter, setHeldCharacter] = useState<Character | null>(null)
-  const [_guessTargetCharId, setGuessTargetCharId] = useState<string | null>(null)
+  const [guessTargetCharId, setGuessTargetCharId] = useState<string | null>(null)
   const [revealedGuessChar, setRevealedGuessChar] = useState<Character | null>(null)
 
   const [hints, setHints] = useState<Hint[]>([])
@@ -108,9 +108,46 @@ export default function PlayerRoom() {
     handleNotesChange(updated)
   }
 
-  // 1. Fetch player & session data
-  const fetchData = useCallback(async () => {
+  const isFetchingRef = useRef(false)
+  const hasPendingFetchRef = useRef(false)
+  const terminalErrorRef = useRef(false)
+
+  // 1. Fetch player & session data (scoped & deduplicated)
+  const fetchData = useCallback(async (scope?: string) => {
+    if (!token || !sessionId || terminalErrorRef.current) return
+
+    if (isFetchingRef.current) {
+      hasPendingFetchRef.current = true
+      return
+    }
+
+    isFetchingRef.current = true
     try {
+      // 1. Scoped points refresh
+      if (scope === 'points') {
+        const [me, sessionData] = await Promise.all([
+          apiFetch<Participant>('/participants/me', {}, token),
+          apiFetch<{ session: Session; participants?: Participant[]; self?: Participant }>(
+            `/sessions/${sessionId}`, {}, token
+          ),
+        ])
+        setParticipant(me)
+        setSession(sessionData.session)
+        return
+      }
+
+      // 2. Scoped hint refresh
+      if (scope === 'hint' && guessTargetCharId) {
+        const [me, hList] = await Promise.all([
+          apiFetch<Participant>('/participants/me', {}, token),
+          apiFetch<Hint[]>(`/hints/${guessTargetCharId}`, {}, token),
+        ])
+        setParticipant(me)
+        setHints(hList)
+        return
+      }
+
+      // 3. Full / multi-scope refresh
       const [me, sessionData] = await Promise.all([
         apiFetch<Participant>('/participants/me', {}, token),
         apiFetch<{ session: Session; participants?: Participant[]; self?: Participant }>(
@@ -161,17 +198,46 @@ export default function PlayerRoom() {
           setSubmittedDrawing(!!myDraw?.submitted)
         }
       }
+      setError('')
     } catch (e: any) {
-      setError(e.message)
+      const errMsg = e?.message || String(e)
+      if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
+        terminalErrorRef.current = true
+      }
+      setError(errMsg)
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
+      if (hasPendingFetchRef.current && !terminalErrorRef.current) {
+        hasPendingFetchRef.current = false
+        fetchData()
+      }
     }
-  }, [token, sessionId])
+  }, [token, sessionId, guessTargetCharId])
 
+  // Polling fallback (45s for missed events), visibility change, and initial load
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 4000)
-    return () => clearInterval(interval)
+
+    // 45s fallback interval for missed events
+    const interval = setInterval(() => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }, 45000)
+
+    // Immediate refresh on tab/page becoming visible again
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetchData])
 
   // 2. WebSocket for live snapshot streaming & updates
@@ -181,11 +247,25 @@ export default function PlayerRoom() {
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
+    // Refresh immediately on WS open/reconnect
+    ws.onopen = () => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+
+        if (msg.type === 'invalidate') {
+          fetchData(msg.scope)
+          return
+        }
+
         if (msg.type === 'state_update') {
           fetchData()
+          return
         }
       } catch {
         // Ignore

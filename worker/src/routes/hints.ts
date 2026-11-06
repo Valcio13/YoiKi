@@ -3,6 +3,7 @@ import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
 import { validateImageFile } from '../lib/imageValidator'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const hintsRouter = new Hono<{ Bindings: Env }>()
 
@@ -29,6 +30,8 @@ hintsRouter.post('/', async (c) => {
     VALUES (?, ?, ?, ?, ?)
   `).bind(id, body.characterId, body.sortOrder ?? 0, body.textContent?.trim() ?? null, Math.max(0, body.pointPrice)).run()
 
+  await broadcastInvalidation(c.env, auth.sessionId, 'hint', { characterId: body.characterId, hintId: id })
+
   return c.json({ id }, 201)
 })
 
@@ -40,10 +43,12 @@ hintsRouter.post('/:id/image', async (c) => {
   const hintId = c.req.param('id')
   const db = c.env.DB
   const hint = await db.prepare(`
-    SELECT h.id, c.session_id FROM hints h JOIN characters c ON h.character_id = c.id WHERE h.id = ?
+    SELECT h.id, h.image_key, c.session_id FROM hints h JOIN characters c ON h.character_id = c.id WHERE h.id = ?
   `).bind(hintId).first<any>()
 
   if (!hint || hint.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
+
+  const oldKey = hint.image_key
 
   const formData = await c.req.formData()
   const file = formData.get('image') as File | null
@@ -58,7 +63,24 @@ hintsRouter.post('/:id/image', async (c) => {
     httpMetadata: { contentType: validation.mimeType },
   })
 
+  // Commit DB update first
   await db.prepare('UPDATE hints SET image_key = ? WHERE id = ?').bind(key, hintId).run()
+
+  // Safely cleanup old R2 object only after new DB reference committed
+  if (oldKey && oldKey !== key) {
+    try {
+      const otherRef = await db.prepare('SELECT id FROM hints WHERE image_key = ? AND id != ?')
+        .bind(oldKey, hintId).first()
+      if (!otherRef) {
+        await c.env.STORAGE.delete(oldKey)
+      }
+    } catch (delErr) {
+      console.error('[hints/image] Failed to delete old hint image from R2:', delErr)
+    }
+  }
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'hint', { hintId })
+
   return c.json({ key })
 })
 
@@ -220,6 +242,9 @@ hintsRouter.post('/:hintId/purchase', async (c) => {
   const updatedParticipant = await db.prepare('SELECT points FROM participants WHERE id = ?')
     .bind(auth.participantId).first<{ points: number }>()
 
+  await broadcastInvalidation(c.env, auth.sessionId, 'hint', { hintId, participantId: auth.participantId })
+  await broadcastInvalidation(c.env, auth.sessionId, 'points', { participantId: auth.participantId })
+
   return c.json({
     ok: true,
     hint: {
@@ -240,7 +265,7 @@ hintsRouter.delete('/:id', async (c) => {
   const db = c.env.DB
 
   const hint = await db.prepare(`
-    SELECT h.id, c.session_id FROM hints h JOIN characters c ON h.character_id = c.id WHERE h.id = ?
+    SELECT h.id, h.image_key, c.session_id FROM hints h JOIN characters c ON h.character_id = c.id WHERE h.id = ?
   `).bind(hintId).first<any>()
 
   if (!hint || hint.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
@@ -249,6 +274,20 @@ hintsRouter.delete('/:id', async (c) => {
     db.prepare('DELETE FROM hint_purchases WHERE hint_id = ?').bind(hintId),
     db.prepare('DELETE FROM hints WHERE id = ?').bind(hintId),
   ])
+
+  // Safely cleanup hint image from R2 if not referenced elsewhere
+  if (hint.image_key) {
+    try {
+      const otherRef = await db.prepare('SELECT id FROM hints WHERE image_key = ?').bind(hint.image_key).first()
+      if (!otherRef) {
+        await c.env.STORAGE.delete(hint.image_key)
+      }
+    } catch (e) {
+      console.error('[hints/delete] Failed to delete hint image from R2:', e)
+    }
+  }
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'hint', { hintId, deleted: true })
 
   return c.json({ ok: true })
 })

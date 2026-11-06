@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const pointsRouter = new Hono<{ Bindings: Env }>()
 
@@ -33,6 +34,12 @@ pointsRouter.post('/', async (c) => {
 
   const updated = await db.prepare('SELECT points FROM participants WHERE id = ?')
     .bind(body.participantId).first<{ points: number }>()
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'points', {
+    participantId: body.participantId,
+    delta: body.delta,
+    newBalance: updated?.points ?? 0,
+  })
 
   return c.json({ ok: true, newBalance: updated?.points ?? 0 })
 })

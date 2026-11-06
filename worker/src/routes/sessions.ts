@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId, newToken, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const sessionsRouter = new Hono<{ Bindings: Env }>()
 
@@ -209,6 +210,8 @@ sessionsRouter.post('/:id/restart', async (c) => {
     `).bind(sessionId),
   ])
 
+  await broadcastInvalidation(c.env, sessionId, 'session', { status: 'lobby' })
+
   return c.json({ ok: true })
 })
 
@@ -237,6 +240,8 @@ sessionsRouter.patch('/:id/status', async (c) => {
       WHERE session_id = ? AND status = 'active'
     `).bind(body.status, now(), sessionId).run()
   }
+
+  await broadcastInvalidation(c.env, sessionId, 'session', { status: body.status })
 
   return c.json({ ok: true, status: body.status })
 })

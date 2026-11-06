@@ -3,6 +3,7 @@ import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
 import { validateImageFile } from '../lib/imageValidator'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const drawingsRouter = new Hono<{ Bindings: Env }>()
 
@@ -37,6 +38,11 @@ drawingsRouter.post('/submit', async (c) => {
     ON CONFLICT(round_id, participant_id) DO UPDATE SET
       r2_key = excluded.r2_key, submitted = 1, submitted_at = excluded.submitted_at
   `).bind(drawingId, roundId, auth.participantId, key, now()).run()
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'drawing', {
+    roundId,
+    participantId: auth.participantId,
+  })
 
   return c.json({ ok: true, key })
 })

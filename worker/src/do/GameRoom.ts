@@ -15,6 +15,28 @@ export class GameRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
+
+    // Internal endpoint for Worker REST endpoints to broadcast invalidation
+    if (url.pathname === '/internal/broadcast' && request.method === 'POST') {
+      try {
+        const body = await request.json<{ sessionId: string; data: any; target?: 'all' | 'host_and_spectators' }>()
+        if (body.target === 'host_and_spectators') {
+          this.broadcastToHostAndSpectators(body.sessionId, body.data)
+        } else {
+          this.broadcastToAll(body.sessionId, body.data)
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     const token = url.searchParams.get('token') || request.headers.get('Authorization')?.replace('Bearer ', '') || ''
 
     const auth = await this.verifyToken(token)
@@ -118,11 +140,24 @@ export class GameRoom extends DurableObject<Env> {
 
     // Player notifies drawing submitted
     if (data.type === 'drawing_submitted' && meta.role === 'player') {
+      this.broadcastToAll(meta.sessionId, {
+        type: 'invalidate',
+        scope: 'drawing',
+        participantId: meta.participantId,
+        slot: meta.participantSlot,
+        ts: Date.now(),
+      })
       this.broadcastToHostAndSpectators(meta.sessionId, {
         type: 'drawing_submitted',
         participantId: meta.participantId,
         slot: meta.participantSlot,
       })
+      return
+    }
+
+    // Invalidation event from client → forward to all
+    if (data.type === 'invalidate') {
+      this.broadcastToAll(meta.sessionId, data)
       return
     }
 

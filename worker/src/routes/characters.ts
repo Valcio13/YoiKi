@@ -3,6 +3,7 @@ import { Env } from '../index'
 import { newId } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
 import { validateImageFile } from '../lib/imageValidator'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const charactersRouter = new Hono<{ Bindings: Env }>()
 
@@ -27,6 +28,8 @@ charactersRouter.post('/', async (c) => {
     INSERT INTO characters (id, session_id, round_id, held_by_slot, guessed_by_slot, name, revealed)
     VALUES (?, ?, ?, ?, ?, ?, 0)
   `).bind(id, body.sessionId, body.roundId, body.heldBySlot, body.guessedBySlot, body.name.trim()).run()
+
+  await broadcastInvalidation(c.env, body.sessionId, 'character', { characterId: id })
 
   return c.json({ id }, 201)
 })
@@ -136,6 +139,9 @@ charactersRouter.patch('/:id/reveal', async (c) => {
   if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
 
   await db.prepare('UPDATE characters SET revealed = 1 WHERE id = ?').bind(characterId).run()
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'character', { characterId, revealed: true })
+
   return c.json({ ok: true, revealed: true })
 })
 
@@ -146,9 +152,11 @@ charactersRouter.post('/:id/image', async (c) => {
 
   const characterId = c.req.param('id')
   const db = c.env.DB
-  const character = await db.prepare('SELECT session_id FROM characters WHERE id = ?')
-    .bind(characterId).first<{ session_id: string }>()
+  const character = await db.prepare('SELECT session_id, image_key FROM characters WHERE id = ?')
+    .bind(characterId).first<{ session_id: string; image_key?: string | null }>()
   if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
+
+  const oldKey = character.image_key
 
   const formData = await c.req.formData()
   const file = formData.get('image') as File | null
@@ -163,8 +171,24 @@ charactersRouter.post('/:id/image', async (c) => {
     httpMetadata: { contentType: validation.mimeType },
   })
 
+  // Commit new DB reference first
   await db.prepare('UPDATE characters SET image_key = ? WHERE id = ?')
     .bind(key, characterId).run()
+
+  // Safely cleanup old R2 object only after new DB reference committed
+  if (oldKey && oldKey !== key) {
+    try {
+      const otherRef = await db.prepare('SELECT id FROM characters WHERE image_key = ? AND id != ?')
+        .bind(oldKey, characterId).first()
+      if (!otherRef) {
+        await c.env.STORAGE.delete(oldKey)
+      }
+    } catch (delErr) {
+      console.error('[characters/image] Failed to delete old image key from R2:', delErr)
+    }
+  }
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'character', { characterId })
 
   return c.json({ key })
 })
@@ -176,16 +200,48 @@ charactersRouter.delete('/:id', async (c) => {
 
   const characterId = c.req.param('id')
   const db = c.env.DB
-  const character = await db.prepare('SELECT session_id FROM characters WHERE id = ?')
-    .bind(characterId).first<{ session_id: string }>()
+  const character = await db.prepare('SELECT session_id, image_key FROM characters WHERE id = ?')
+    .bind(characterId).first<{ session_id: string; image_key?: string | null }>()
   if (!character || character.session_id !== auth.sessionId) return c.json({ error: 'Forbidden' }, 403)
 
-  // Delete hints, purchases, and character
+  // Find any hint images for hints of this character
+  const hintImages = await db.prepare('SELECT image_key FROM hints WHERE character_id = ? AND image_key IS NOT NULL')
+    .bind(characterId).all<{ image_key: string }>()
+
+  // Delete hints, purchases, and character from database
   await db.batch([
     db.prepare('DELETE FROM hint_purchases WHERE hint_id IN (SELECT id FROM hints WHERE character_id = ?)').bind(characterId),
     db.prepare('DELETE FROM hints WHERE character_id = ?').bind(characterId),
     db.prepare('DELETE FROM characters WHERE id = ?').bind(characterId),
   ])
+
+  // Safely cleanup character image from R2 if not referenced elsewhere
+  if (character.image_key) {
+    try {
+      const otherRef = await db.prepare('SELECT id FROM characters WHERE image_key = ?').bind(character.image_key).first()
+      if (!otherRef) {
+        await c.env.STORAGE.delete(character.image_key)
+      }
+    } catch (e) {
+      console.error('[characters/delete] Failed to delete character image from R2:', e)
+    }
+  }
+
+  // Safely cleanup associated hint images from R2 if not referenced elsewhere
+  for (const h of hintImages.results || []) {
+    if (h.image_key) {
+      try {
+        const otherRef = await db.prepare('SELECT id FROM hints WHERE image_key = ?').bind(h.image_key).first()
+        if (!otherRef) {
+          await c.env.STORAGE.delete(h.image_key)
+        }
+      } catch (e) {
+        console.error('[characters/delete] Failed to delete hint image from R2:', e)
+      }
+    }
+  }
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'character', { characterId, deleted: true })
 
   return c.json({ ok: true })
 })

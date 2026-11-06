@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Env } from '../index'
 import { newId, now } from '../lib/db'
 import { resolveAuth } from '../lib/auth'
+import { broadcastInvalidation } from '../lib/broadcast'
 
 export const roundsRouter = new Hono<{ Bindings: Env }>()
 
@@ -27,6 +28,8 @@ roundsRouter.post('/', async (c) => {
     db.prepare(`UPDATE sessions SET current_round = ?, status = 'playing' WHERE id = ?`)
       .bind(roundNumber, body.sessionId),
   ])
+
+  await broadcastInvalidation(c.env, body.sessionId, 'round', { roundId, roundNumber })
 
   return c.json({ roundId, roundNumber }, 201)
 })
@@ -62,6 +65,8 @@ roundsRouter.patch('/:roundId', async (c) => {
 
   await db.prepare('UPDATE rounds SET status = ?, ended_at = ? WHERE id = ?')
     .bind(body.status, body.status === 'ended' ? now() : null, roundId).run()
+
+  await broadcastInvalidation(c.env, auth.sessionId, 'round', { roundId, status: body.status })
 
   return c.json({ ok: true })
 })

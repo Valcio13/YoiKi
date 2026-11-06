@@ -47,8 +47,19 @@ export default function SpectatorView() {
 
   const wsRef = useRef<WebSocket | null>(null)
 
-  const fetchData = useCallback(async () => {
-    if (!sessionId) return
+  const isFetchingRef = useRef(false)
+  const hasPendingFetchRef = useRef(false)
+  const terminalErrorRef = useRef(false)
+
+  const fetchData = useCallback(async (_scope?: string) => {
+    if (!sessionId || terminalErrorRef.current) return
+
+    if (isFetchingRef.current) {
+      hasPendingFetchRef.current = true
+      return
+    }
+
+    isFetchingRef.current = true
     try {
       const data = await apiFetch<{ session: Session; participants: Participant[] }>(
         `/sessions/${sessionId}`, {}, token
@@ -72,41 +83,87 @@ export default function SpectatorView() {
           }
         }
       }
-    } catch {
-      // Ignore
+    } catch (e: any) {
+      const errMsg = e?.message || String(e)
+      if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('404')) {
+        terminalErrorRef.current = true
+      }
+    } finally {
+      isFetchingRef.current = false
+      if (hasPendingFetchRef.current && !terminalErrorRef.current) {
+        hasPendingFetchRef.current = false
+        fetchData()
+      }
     }
   }, [sessionId, token])
 
+  // Polling fallback (45s for missed events), visibility change, and initial load
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 4000)
-    return () => clearInterval(interval)
+
+    // 45s fallback interval for missed events
+    const interval = setInterval(() => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }, 45000)
+
+    // Immediate refresh on tab/page becoming visible again
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetchData])
 
-  // WebSocket for real-time live preview capture
+  // WebSocket for real-time live preview capture & state invalidation
   useEffect(() => {
     if (!sessionId || !token) return
     const wsUrl = getWsUrl(sessionId, token)
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
+    // Refresh immediately upon WS open/reconnect
+    ws.onopen = () => {
+      if (!terminalErrorRef.current) {
+        fetchData()
+      }
+    }
+
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+
+        if (msg.type === 'invalidate') {
+          fetchData(msg.scope)
+          return
+        }
+
         if (msg.type === 'preview' && msg.participantId && msg.data) {
           setLivePreviews(prev => ({
             ...prev,
             [msg.participantId]: msg.data,
           }))
+          return
         }
+
         if (msg.type === 'player_status') {
           setPlayerOnline(prev => ({
             ...prev,
             [msg.participantId]: msg.online,
           }))
+          return
         }
+
         if (msg.type === 'state_update') {
           fetchData()
+          return
         }
       } catch {
         // Ignore
